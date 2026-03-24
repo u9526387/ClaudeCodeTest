@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tic Tac Toe</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #1a1a2e;
+      font-family: 'Segoe UI', sans-serif;
+      color: #eee;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      letter-spacing: 0.1em;
+      color: #e94560;
+    }
+
+    #status {
+      font-size: 1.2rem;
+      margin-bottom: 1.5rem;
+      min-height: 1.5em;
+      color: #a8dadc;
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(3, 110px);
+      grid-template-rows: repeat(3, 110px);
+      gap: 10px;
+    }
+
+    .cell {
+      background: #16213e;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      user-select: none;
+    }
+
+    .cell:hover:not(.taken) {
+      background: #0f3460;
+      transform: scale(1.05);
+    }
+
+    .cell.x { color: #e94560; }
+    .cell.o { color: #a8dadc; }
+
+    .cell.win {
+      background: #0f3460;
+      animation: pulse 0.4s ease;
+    }
+
+    @keyframes pulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.12); }
+      100% { transform: scale(1); }
+    }
+
+    #controls {
+      margin-top: 2rem;
+      display: flex;
+      gap: 1rem;
+    }
+
+    button {
+      padding: 0.6rem 1.4rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      background: #e94560;
+      color: #fff;
+      transition: background 0.15s;
+    }
+
+    button:hover { background: #c73652; }
+
+    #modeBtn {
+      background: #0f3460;
+    }
+
+    #modeBtn:hover { background: #1a4a80; }
+
+    #score {
+      margin-top: 1.5rem;
+      display: flex;
+      gap: 2.5rem;
+      font-size: 1rem;
+      color: #aaa;
+    }
+
+    #score span { text-align: center; }
+    #score strong { display: block; font-size: 1.5rem; color: #eee; }
+  </style>
+</head>
+<body>
+  <h1>Tic Tac Toe</h1>
+  <div id="status"></div>
+  <div id="board"></div>
+  <div id="controls">
+    <button id="restartBtn">Restart</button>
+    <button id="modeBtn">vs CPU</button>
+  </div>
+  <div id="score">
+    <span><strong id="scoreX">0</strong> X</span>
+    <span><strong id="scoreDraws">0</strong> Draws</span>
+    <span><strong id="scoreO">0</strong> O</span>
+  </div>
+
+  <script>
+    const boardEl    = document.getElementById('board');
+    const statusEl   = document.getElementById('status');
+    const restartBtn = document.getElementById('restartBtn');
+    const modeBtn    = document.getElementById('modeBtn');
+
+    const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+    let board, current, gameOver, vsAI, scores = { X: 0, O: 0, draws: 0 };
+
+    // ── Game state ──────────────────────────────────────────────────────────
+
+    function newGame() {
+      board    = Array(9).fill(null);
+      current  = 'X';
+      gameOver = false;
+      render();
+      statusEl.textContent = "X's turn";
+    }
+
+    function getResult(b) {
+      for (const [a, bb, c] of LINES) {
+        if (b[a] && b[a] === b[bb] && b[a] === b[c])
+          return { winner: b[a], line: [a, bb, c] };
+      }
+      if (b.every(Boolean)) return { winner: null, line: [] };
+      return null;
+    }
+
+    // ── Rendering ────────────────────────────────────────────────────────────
+
+    function render(winLine = []) {
+      boardEl.innerHTML = '';
+      board.forEach((val, i) => {
+        const cell = document.createElement('div');
+        cell.className = 'cell' + (val ? ` ${val.toLowerCase()} taken` : '');
+        if (winLine.includes(i)) cell.classList.add('win');
+        cell.textContent = val || '';
+        cell.onclick = () => onCellClick(i);
+        boardEl.appendChild(cell);
+      });
+    }
+
+    function updateScore() {
+      document.getElementById('scoreX').textContent     = scores.X;
+      document.getElementById('scoreO').textContent     = scores.O;
+      document.getElementById('scoreDraws').textContent = scores.draws;
+    }
+
+    // ── Move logic ───────────────────────────────────────────────────────────
+
+    function onCellClick(i) {
+      if (gameOver || board[i]) return;
+      if (vsAI && current === 'O') return;
+      makeMove(i);
+    }
+
+    function makeMove(i) {
+      board[i] = current;
+      const result = getResult(board);
+      if (result) {
+        render(result.line);
+        gameOver = true;
+        if (result.winner) {
+          scores[result.winner]++;
+          statusEl.textContent = `${result.winner} wins!`;
+        } else {
+          scores.draws++;
+          statusEl.textContent = "Draw!";
+        }
+        updateScore();
+      } else {
+        current = current === 'X' ? 'O' : 'X';
+        render();
+        statusEl.textContent = `${current}'s turn`;
+        if (vsAI && current === 'O') setTimeout(aiMove, 320);
+      }
+    }
+
+    // ── AI (minimax) ─────────────────────────────────────────────────────────
+
+    function aiMove() {
+      if (gameOver) return;
+      makeMove(bestMove(board));
+    }
+
+    function bestMove(b) {
+      let best = -Infinity, move = -1;
+      b.forEach((v, i) => {
+        if (!v) {
+          b[i] = 'O';
+          const s = minimax(b, 0, false);
+          b[i] = null;
+          if (s > best) { best = s; move = i; }
+        }
+      });
+      return move;
+    }
+
+    function minimax(b, depth, isMax) {
+      const r = getResult(b);
+      if (r) {
+        if (r.winner === 'O') return 10 - depth;
+        if (r.winner === 'X') return depth - 10;
+        return 0;
+      }
+      if (isMax) {
+        let best = -Infinity;
+        b.forEach((v, i) => {
+          if (!v) { b[i] = 'O'; best = Math.max(best, minimax(b, depth+1, false)); b[i] = null; }
+        });
+        return best;
+      } else {
+        let best = Infinity;
+        b.forEach((v, i) => {
+          if (!v) { b[i] = 'X'; best = Math.min(best, minimax(b, depth+1, true)); b[i] = null; }
+        });
+        return best;
+      }
+    }
+
+    // ── Buttons ──────────────────────────────────────────────────────────────
+
+    restartBtn.onclick = newGame;
+
+    modeBtn.onclick = () => {
+      vsAI = !vsAI;
+      modeBtn.textContent = vsAI ? '2 Players' : 'vs CPU';
+      newGame();
+    };
+
+    // ── Start ────────────────────────────────────────────────────────────────
+
+    vsAI = false;
+    newGame();
+  </script>
+</body>
+</html>
