@@ -17,6 +17,23 @@
       --danger-dark: #dc2626;
       --shadow: 0 2px 8px rgba(0,0,0,0.08);
       --radius: 12px;
+      --border: #e2e8f0;
+      --modal-bg: #fff;
+      --overlay: rgba(0,0,0,0.4);
+    }
+
+    .dark {
+      --primary: #3b82f6;
+      --primary-dark: #60a5fa;
+      --primary-light: #1e3a5f;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --shadow: 0 2px 8px rgba(0,0,0,0.3);
+      --border: #334155;
+      --modal-bg: #1e293b;
+      --overlay: rgba(0,0,0,0.6);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -60,12 +77,14 @@
     #searchInput {
       width: 100%;
       padding: 0.75rem 1rem;
-      border: 2px solid #e2e8f0;
+      border: 2px solid var(--border);
       border-radius: 10px;
       font-size: 1rem;
       outline: none;
       transition: border-color 0.2s;
       margin-bottom: 1rem;
+      background: var(--card-bg);
+      color: var(--text);
     }
     #searchInput:focus { border-color: var(--primary); }
 
@@ -177,24 +196,43 @@
       line-height: 1.4;
     }
 
-    .btn-delete {
+    .card-actions {
       position: absolute;
       top: 0.75rem;
       right: 0.75rem;
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .btn-card {
       background: none;
       border: none;
-      color: #cbd5e1;
-      font-size: 1.1rem;
+      color: var(--text-muted);
+      font-size: 1rem;
       cursor: pointer;
       padding: 0.2rem 0.4rem;
       border-radius: 6px;
       transition: all 0.2s;
       line-height: 1;
+      opacity: 0.5;
     }
-    .btn-delete:hover {
-      color: var(--danger);
-      background: #fef2f2;
+    .card:hover .btn-card { opacity: 1; }
+    .btn-card.edit:hover { color: var(--primary); background: var(--primary-light); }
+    .btn-card.delete:hover { color: var(--danger); background: #fef2f2; }
+    .dark .btn-card.delete:hover { background: #3b1a1a; }
+
+    .dark-toggle {
+      background: none;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 0.45rem 0.7rem;
+      font-size: 1.1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: var(--text);
+      line-height: 1;
     }
+    .dark-toggle:hover { border-color: var(--primary); }
 
     #emptyState {
       text-align: center;
@@ -209,7 +247,7 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.4);
+      background: var(--overlay);
       justify-content: center;
       align-items: center;
       z-index: 100;
@@ -217,7 +255,7 @@
     #modalOverlay.open { display: flex; }
 
     #modal {
-      background: #fff;
+      background: var(--modal-bg);
       border-radius: var(--radius);
       padding: 2rem;
       width: 100%;
@@ -246,12 +284,14 @@
       width: 100%;
       margin-top: 0.3rem;
       padding: 0.6rem 0.75rem;
-      border: 2px solid #e2e8f0;
+      border: 2px solid var(--border);
       border-radius: 8px;
       font-size: 0.95rem;
       font-family: inherit;
       outline: none;
       transition: border-color 0.2s;
+      background: var(--bg);
+      color: var(--text);
     }
     #modal input:focus, #modal textarea:focus { border-color: var(--primary); }
 
@@ -264,7 +304,7 @@
 
     .btn-cancel {
       padding: 0.55rem 1.1rem;
-      border: 2px solid #e2e8f0;
+      border: 2px solid var(--border);
       border-radius: 8px;
       background: transparent;
       color: var(--text-muted);
@@ -300,7 +340,10 @@
   <div class="container">
     <header>
       <h1>My Bookmarks</h1>
-      <button class="btn-add" id="addBtn">+ Add Bookmark</button>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <button class="btn-add" id="addBtn">+ Add Bookmark</button>
+        <button class="dark-toggle" id="darkToggle" title="Toggle dark mode">&#9790;</button>
+      </div>
     </header>
 
     <input type="text" id="searchInput" placeholder="Search bookmarks by title, category, or URL...">
@@ -312,7 +355,7 @@
 
   <div id="modalOverlay">
     <div id="modal">
-      <h2>Add Bookmark</h2>
+      <h2 id="modalTitle">Add Bookmark</h2>
       <form id="bookmarkForm">
         <label>Title <span style="color:var(--danger)">*</span>
           <input type="text" id="fTitle" required>
@@ -336,8 +379,10 @@
 
   <script>
     const STORAGE_KEY = 'my-bookmarks';
+    const THEME_KEY = 'my-bookmarks-theme';
     let bookmarks = [];
     let activeCategory = null;
+    let editingId = null;
 
     const SAMPLE_BOOKMARKS = [
       { id: 1, title: 'MDN Web Docs', url: 'https://developer.mozilla.org', category: 'Dev Tools', notes: 'Mozilla\'s comprehensive web documentation', createdAt: '2026-01-15T10:00:00Z' },
@@ -386,6 +431,30 @@
 
     function deleteBookmark(id) {
       bookmarks = bookmarks.filter(b => b.id !== id);
+      saveBookmarks();
+      renderAll();
+    }
+
+    function openEdit(id) {
+      const b = bookmarks.find(b => b.id === id);
+      if (!b) return;
+      editingId = id;
+      document.getElementById('modalTitle').textContent = 'Edit Bookmark';
+      document.getElementById('fTitle').value = b.title;
+      document.getElementById('fUrl').value = b.url;
+      document.getElementById('fCategory').value = b.category;
+      document.getElementById('fNotes').value = b.notes || '';
+      document.getElementById('modalOverlay').classList.add('open');
+      document.getElementById('fTitle').focus();
+    }
+
+    function updateBookmark(id, title, url, category, notes) {
+      const b = bookmarks.find(b => b.id === id);
+      if (!b) return;
+      b.title = title;
+      b.url = url;
+      b.category = category;
+      b.notes = notes;
       saveBookmarks();
       renderAll();
     }
@@ -445,7 +514,10 @@
         const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : '';
 
         html += `<div class="card">
-          <button class="btn-delete" data-delete="${b.id}" title="Delete bookmark">&times;</button>
+          <div class="card-actions">
+            <button class="btn-card edit" data-edit="${b.id}" title="Edit bookmark">&#9998;</button>
+            <button class="btn-card delete" data-delete="${b.id}" title="Delete bookmark">&times;</button>
+          </div>
           <div class="card-header">
             ${faviconUrl
               ? `<img class="card-favicon" src="${faviconUrl}" alt="" onerror="this.outerHTML='<div class=\\'card-letter\\' style=\\'background:${color}\\'>${letter}</div>'">`
@@ -468,17 +540,22 @@
 
     // Event listeners
     document.getElementById('addBtn').addEventListener('click', () => {
+      editingId = null;
+      document.getElementById('modalTitle').textContent = 'Add Bookmark';
+      document.getElementById('bookmarkForm').reset();
       document.getElementById('modalOverlay').classList.add('open');
       document.getElementById('fTitle').focus();
     });
 
     document.getElementById('cancelBtn').addEventListener('click', () => {
+      editingId = null;
       document.getElementById('modalOverlay').classList.remove('open');
       document.getElementById('bookmarkForm').reset();
     });
 
     document.getElementById('modalOverlay').addEventListener('click', (e) => {
       if (e.target === e.currentTarget) {
+        editingId = null;
         e.currentTarget.classList.remove('open');
         document.getElementById('bookmarkForm').reset();
       }
@@ -488,12 +565,15 @@
       e.preventDefault();
       let url = document.getElementById('fUrl').value.trim();
       if (url && !url.match(/^https?:\/\//i)) url = 'https://' + url;
-      addBookmark(
-        document.getElementById('fTitle').value.trim(),
-        url,
-        document.getElementById('fCategory').value.trim(),
-        document.getElementById('fNotes').value.trim()
-      );
+      const title = document.getElementById('fTitle').value.trim();
+      const category = document.getElementById('fCategory').value.trim();
+      const notes = document.getElementById('fNotes').value.trim();
+      if (editingId !== null) {
+        updateBookmark(editingId, title, url, category, notes);
+      } else {
+        addBookmark(title, url, category, notes);
+      }
+      editingId = null;
       document.getElementById('modalOverlay').classList.remove('open');
       document.getElementById('bookmarkForm').reset();
     });
@@ -508,12 +588,25 @@
     });
 
     document.getElementById('grid').addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-delete]');
-      if (!btn) return;
-      deleteBookmark(Number(btn.dataset.delete));
+      const editBtn = e.target.closest('[data-edit]');
+      if (editBtn) return openEdit(Number(editBtn.dataset.edit));
+      const delBtn = e.target.closest('[data-delete]');
+      if (delBtn) return deleteBookmark(Number(delBtn.dataset.delete));
+    });
+
+    // Dark mode
+    function applyTheme(dark) {
+      document.documentElement.classList.toggle('dark', dark);
+      document.getElementById('darkToggle').innerHTML = dark ? '&#9788;' : '&#9790;';
+      localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+    }
+
+    document.getElementById('darkToggle').addEventListener('click', () => {
+      applyTheme(!document.documentElement.classList.contains('dark'));
     });
 
     // Init
+    applyTheme(localStorage.getItem(THEME_KEY) === 'dark');
     loadBookmarks();
     renderAll();
   </script>
